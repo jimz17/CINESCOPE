@@ -9,6 +9,8 @@ import SwiftUI
 
 struct ContentView: View {
 
+    let onLogout: () -> Void
+
     @StateObject private var viewModel = MovieViewModel()
 
     private let columns = [
@@ -23,6 +25,12 @@ struct ContentView: View {
                 exploreScreen
                     .navigationTitle("CineScope")
                     .toolbar {
+                        ToolbarItem(placement: .topBarLeading) {
+                            Button("Logout") {
+                                onLogout()
+                            }
+                        }
+
                         ToolbarItem(placement: .topBarTrailing) {
                             if !viewModel.searchText.isEmpty {
                                 Button("Clear") {
@@ -36,6 +44,13 @@ struct ContentView: View {
             }
             .tabItem {
                 Label("Explore", systemImage: "film")
+            }
+
+            NavigationStack {
+                BookmarksView(viewModel: viewModel)
+            }
+            .tabItem {
+                Label("Bookmarks", systemImage: "bookmark.fill")
             }
 
             NavigationStack {
@@ -54,41 +69,42 @@ struct ContentView: View {
             searchControls
 
             if viewModel.isLoading {
+                Spacer()
                 ProgressView("Loading...")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                Spacer()
 
             } else if let error = viewModel.errorMessage {
+                Spacer()
                 ContentUnavailableView(
                     "Could not load movies",
                     systemImage: "exclamationmark.triangle",
                     description: Text(error)
                 )
                 .padding()
+                Spacer()
 
             } else {
                 ScrollView {
                     LazyVGrid(columns: columns, spacing: 16) {
                         ForEach(viewModel.movies) { movie in
                             ZStack(alignment: .topTrailing) {
-
                                 NavigationLink {
-                                    MovieDetailView(movie: movie)
+                                    MovieDetailView(movie: movie, viewModel: viewModel)
                                 } label: {
                                     MovieCardView(movie: movie)
                                         .foregroundStyle(.primary)
                                 }
                                 .buttonStyle(.plain)
 
-                                Button {
-                                    viewModel.toggleFavorite(movie)
-                                } label: {
-                                    Image(systemName: viewModel.isFavorite(movie) ? "heart.fill" : "heart")
-                                        .foregroundColor(.red)
-                                        .padding(8)
-                                        .background(.ultraThinMaterial)
-                                        .clipShape(Circle())
+                                BookmarkHeartButton(
+                                    isBookmarked: viewModel.isBookmarked(movie)
+                                ) {
+                                    Task {
+                                        await viewModel.toggleBookmark(movie)
+                                    }
                                 }
                                 .padding(8)
+                                .zIndex(2)
                             }
                         }
                     }
@@ -97,11 +113,13 @@ struct ContentView: View {
                 }
                 .refreshable {
                     await viewModel.loadTrending()
+                    await viewModel.loadBookmarks()
                 }
             }
         }
         .task {
             await viewModel.loadTrending()
+            await viewModel.loadBookmarks()
         }
     }
 
@@ -143,5 +161,5 @@ struct ContentView: View {
 }
 
 #Preview {
-    ContentView()
+    ContentView(onLogout: {})
 }
